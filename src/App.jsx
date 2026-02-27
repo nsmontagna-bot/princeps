@@ -1648,7 +1648,13 @@ export default function App(){
   // ── Save a book to Supabase ──
 
     const handleSave=async(b)=>{
-  const row={...b,user_id:userId,id:b.id||crypto.randomUUID()};
+const row={...b,user_id:userId,id:b.id||crypto.randomUUID(),
+  start_date:b.start_date||null,
+  end_date:b.end_date||null,
+  pages:b.pages?parseInt(b.pages):null,
+  rating:b.rating||null,
+  genre_rating:b.genre_rating||null,
+};
   console.log("saving row:", JSON.stringify(row));
     const {data,error}=await supabase.from("books").upsert(row,{onConflict:"id"}).select().single();
     if(data){
