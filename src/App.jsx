@@ -705,7 +705,8 @@ function BookDetail({book,onBack,onEdit}){
   const [showRec,setShowRec]=useState(false);
   const findSimilar=async()=>{
     setLoading(true);
-    const t=await callClaude([{role:"user",content:`I finished "${book.title}" by ${book.author} (${book.genre}). Suggest 4 similar books. Format: "Title by Author — one sentence why". Be specific and literary.`}]);
+    const t=await callClaude([{role:"user",content:`Suggest 4 books similar to "${book.title}" by ${book.author} in the ${book.genre} genre. I rated it ${book.rating}/10. My review: "${book.review||"no review provided"}". Important: do NOT ask for more information — just make your best recommendations based on what you know about this genre and author. Format each as: "Title by Author — one sentence why."`}]);
+
     setSimilar(t);setLoading(false);
   };
   return(
