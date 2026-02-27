@@ -1646,8 +1646,10 @@ export default function App(){
   },[userId]);
 
   // ── Save a book to Supabase ──
-  const handleSave=async(b)=>{
-    const row={...b,user_id:userId,id:b.id||crypto.randomUUID()};
+
+    const handleSave=async(b)=>{
+  const row={...b,user_id:userId,id:b.id||crypto.randomUUID()};
+  console.log("saving row:", JSON.stringify(row));
     const {data,error}=await supabase.from("books").upsert(row,{onConflict:"id"}).select().single();
     if(data){
       setBooks(prev=>prev.find(e=>e.id===data.id)?prev.map(e=>e.id===data.id?data:e):[data,...prev]);
