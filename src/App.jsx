@@ -511,6 +511,90 @@ function GoodreadsImport({onImport,onClose}){
   );
 }
 
+
+// ─── BOOK SEARCH ──────────────────────────────────────────────────────────────
+const GBOOKS_KEY = import.meta.env.VITE_GOOGLE_BOOKS_KEY;
+
+async function searchBooks(query){
+  const res=await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=8&key=${GBOOKS_KEY}`);
+  const d=await res.json();
+  return (d.items||[]).map(item=>{
+    const info=item.volumeInfo||{};
+    return {
+      googleId:item.id,
+      title:info.title||"",
+      author:(info.authors||[]).join(", "),
+      genre:(info.categories||["Fiction"])[0].split("/")[0].trim(),
+      pages:info.pageCount||null,
+      isbn:(info.industryIdentifiers||[]).find(i=>i.type==="ISBN_13")?.identifier||"",
+      cover:info.imageLinks?.thumbnail?.replace("http://","https://")||null,
+      publicRating:info.averageRating||null,
+      ratingsCount:info.ratingsCount||0,
+      description:info.description||"",
+    };
+  });
+}
+
+function BookSearchModal({onClose,onSelect,mode}){
+  const [query,setQuery]=useState("");
+  const [results,setResults]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [searched,setSearched]=useState(false);
+  const inputRef=useRef(null);
+
+  useEffect(()=>{inputRef.current?.focus();},[]);
+
+  const search=async()=>{
+    if(!query.trim())return;
+    setLoading(true);setSearched(true);
+    const r=await searchBooks(query);
+    setResults(r);setLoading(false);
+  };
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:580,maxHeight:"90vh"}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-header">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <SL>{mode==="wishlist"?"Add to Want to Read":"Search & Log a Book"}</SL>
+            <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:TEXT,opacity:.6}}>×</button>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by title or author…" onKeyDown={e=>e.key==="Enter"&&search()} style={{flex:1}}/>
+            <button className="btn-primary" style={{padding:"10px 20px",flexShrink:0}} onClick={search}>Search</button>
+          </div>
+        </div>
+        <div className="modal-body" style={{padding:"16px 28px",overflowY:"auto",maxHeight:"60vh"}}>
+          {loading&&<p style={{fontFamily:"Lora",fontStyle:"italic",fontSize:14,opacity:.5,textAlign:"center",padding:"32px 0"}}>Searching…</p>}
+          {!loading&&searched&&results.length===0&&<p style={{fontFamily:"Lora",fontStyle:"italic",fontSize:14,opacity:.5,textAlign:"center",padding:"32px 0"}}>No results found. Try a different search.</p>}
+          {results.map(book=>(
+            <div key={book.googleId} style={{display:"flex",gap:12,padding:"12px 0",borderBottom:"1px solid rgba(26,26,46,.07)",alignItems:"flex-start"}}>
+              {book.cover
+                ?<img src={book.cover} alt={book.title} style={{width:44,height:64,objectFit:"cover",flexShrink:0,boxShadow:"0 2px 8px rgba(0,0,0,.15)"}}/>
+                :<div style={{width:44,height:64,background:PALETTE[Math.floor(Math.random()*PALETTE.length)],flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontFamily:"Playfair Display",fontStyle:"italic",fontSize:16,color:"rgba(255,255,255,.7)"}}>p</span></div>
+              }
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontFamily:"Libre Baskerville",fontWeight:700,fontSize:14,marginBottom:2,lineHeight:1.3}}>{book.title}</p>
+                <p className="t-label" style={{marginBottom:4}}>{book.author}</p>
+                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                  {book.publicRating&&<span style={{fontFamily:"Nunito",fontSize:10,color:ORANGE}}>★ {book.publicRating.toFixed(1)} <span style={{opacity:.4,color:TEXT}}>({book.ratingsCount.toLocaleString()})</span></span>}
+                  {book.pages&&<span style={{fontFamily:"Nunito",fontSize:10,opacity:.4}}>{book.pages}pp</span>}
+                  <span style={{fontFamily:"Nunito",fontSize:10,opacity:.4}}>{book.genre}</span>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                {mode!=="wishlist"&&<button className="btn-primary" style={{padding:"6px 12px",fontSize:9,whiteSpace:"nowrap"}} onClick={()=>onSelect(book,"finished")}>✓ Read it</button>}
+                <button className="btn-ghost" style={{padding:"6px 12px",fontSize:9,whiteSpace:"nowrap"}} onClick={()=>onSelect(book,"wishlist")}>+ Want to Read</button>
+                {mode!=="wishlist"&&<button className="btn-ghost" style={{padding:"6px 12px",fontSize:9,whiteSpace:"nowrap"}} onClick={()=>onSelect(book,"reading")}>📖 Reading</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── LOG BOOK FORM ────────────────────────────────────────────────────────────
 const F=({label,children})=><div style={{marginBottom:20}}><SL style={{marginBottom:6}}>{label}</SL>{children}</div>;
 
@@ -518,12 +602,38 @@ function LogBookModal({onClose,onSave,initial}){
   const blank={title:"",author:"",genre:GENRES[0],pages:"",isbn:"",start_date:"",end_date:"",recommended_by:"",spine_color:PALETTE[0],rating:0,genre_rating:0,review:"",private_notes:"",quotes:"",book_club_questions:"",id:null,status:"finished"};
   const [form,setForm]=useState(initial||blank);
   const [camera,setCamera]=useState(null);
+  const [showSearch,setShowSearch]=useState(!initial);
+
+  const handleSearchSelect=(book,status)=>{
+    const today=new Date().toISOString().split("T")[0];
+    setForm(f=>({...f,
+      title:book.title,
+      author:book.author,
+      genre:book.genre||GENRES[0],
+      pages:book.pages||"",
+      isbn:book.isbn||"",
+      spine_color:PALETTE[Math.floor(Math.random()*PALETTE.length)],
+      status,
+      end_date:status==="finished"?today:"",
+      start_date:status==="reading"?today:"",
+    }));
+    setShowSearch(false);
+    if(status==="wishlist"){onSave({...blank,title:book.title,author:book.author,genre:book.genre||GENRES[0],pages:book.pages||"",isbn:book.isbn||"",spine_color:PALETTE[Math.floor(Math.random()*PALETTE.length)],status:"wishlist",id:crypto.randomUUID()});onClose();}
+  };
   const set=(k,v)=>setForm(f=>({...f,[k]:v}));
   const handleCam=(res)=>{
     if(camera==="cover"&&res.title)setForm(f=>({...f,title:res.title||f.title,author:res.author||f.author,genre:res.genre||f.genre}));
     else if(camera==="page"&&res.quote)setForm(f=>({...f,quotes:f.quotes?f.quotes+"\n\n"+res.quote:res.quote}));
   };
   const save=()=>{if(!form.title.trim())return;onSave({...form,id:form.id||Date.now().toString()});onClose();};
+  if(showSearch)return(
+    <BookSearchModal
+      onClose={onClose}
+      mode="log"
+      onSelect={handleSearchSelect}
+    />
+  );
+
   return(
     <>
       {camera&&<CameraModal mode={camera} onClose={()=>setCamera(null)} onResult={handleCam}/>}
@@ -705,8 +815,7 @@ function BookDetail({book,onBack,onEdit}){
   const [showRec,setShowRec]=useState(false);
   const findSimilar=async()=>{
     setLoading(true);
-    const t=await callClaude([{role:"user",content:`Suggest 4 books similar to "${book.title}" by ${book.author} in the ${book.genre} genre. I rated it ${book.rating}/10. My review: "${book.review||"no review provided"}". Important: do NOT ask for more information — just make your best recommendations based on what you know about this genre and author. Format each as: "Title by Author — one sentence why."`}]);
-
+    const t=await callClaude([{role:"user",content:`I finished "${book.title}" by ${book.author} (${book.genre}). Suggest 4 similar books. Format: "Title by Author — one sentence why". Be specific and literary.`}]);
     setSimilar(t);setLoading(false);
   };
   return(
@@ -866,21 +975,29 @@ function Home({books,setActiveTab,onAdd,profile}){
 }
 
 // ─── LIBRARY ──────────────────────────────────────────────────────────────────
-function Library({books,onSelect,onAdd,onGoodreads}){
+function Library({books,onSelect,onAdd,onGoodreads,onSearchAdd}){
   const [filter,setFilter]=useState("All"),[status,setStatus]=useState("all"),[sort,setSort]=useState("recent"),[view,setView]=useState("shelf");
+  const [libSearch,setLibSearch]=useState("");
+  const [showBookSearch,setShowBookSearch]=useState(false);
   const byStatus=status==="all"?books:books.filter(b=>(b.status||"finished")===status);
   const genres=["All",...new Set(byStatus.map(b=>b.genre))];
   let filtered=filter==="All"?byStatus:byStatus.filter(b=>b.genre===filter);
+  filtered=libSearch?filtered.filter(b=>b.title.toLowerCase().includes(libSearch.toLowerCase())||b.author.toLowerCase().includes(libSearch.toLowerCase())):filtered;
   filtered=[...filtered].sort((a,b)=>sort==="recent"?b.id-a.id:sort==="rating"?b.rating-a.rating:a.title.localeCompare(b.title));
   const counts={reading:books.filter(b=>b.status==="reading").length,finished:books.filter(b=>b.status==="finished"||!b.status).length,wishlist:books.filter(b=>b.status==="wishlist").length};
   return(
     <div className="container" style={{paddingTop:48,paddingBottom:80}}>
-      <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:32,flexWrap:"wrap",gap:16}}>
+      <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:24,flexWrap:"wrap",gap:16}}>
         <div><SL style={{marginBottom:8}}>your collection</SL><h2 className="t-display" style={{fontSize:40,lineHeight:1}}>editio princeps</h2></div>
         <div style={{display:"flex",gap:10}}>
           <button className="btn-ghost" style={{fontSize:10}} onClick={onGoodreads}>↑ Import Goodreads</button>
           <button className="btn-primary" onClick={onAdd}>+ Log a Book</button>
         </div>
+      </div>
+      {showBookSearch&&<BookSearchModal onClose={()=>setShowBookSearch(false)} mode="log" onSelect={(book,status)=>{onSearchAdd(book,status);setShowBookSearch(false);}}/>}
+      <div style={{display:"flex",gap:8,marginBottom:24}}>
+        <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="Search your library…" style={{maxWidth:300}} autoComplete="off"/>
+        <button className="btn-ghost" style={{fontSize:10,flexShrink:0}} onClick={()=>setShowBookSearch(true)}>🔍 Find a Book</button>
       </div>
       <div style={{display:"flex",gap:0,border:`1px solid ${TEXT_MED}`,marginBottom:20,width:"fit-content"}}>
         {[["all",`All (${books.length})`],["reading",`Reading (${counts.reading})`],["finished",`Finished (${counts.finished})`],["wishlist","Want to Read"]].map(([v,l])=>(
@@ -1629,7 +1746,7 @@ export default function App(){
           {selected?(
             <BookDetail book={selected} onBack={()=>setSelected(null)} onEdit={()=>{setEditBook(selected);setShowLog(true);}}/>
           ):tab==="home"    ?<Home books={books} setActiveTab={setTab} onAdd={()=>setShowLog(true)} profile={profile}/>
-          :tab==="library"  ?<Library books={books} onSelect={setSelected} onAdd={()=>setShowLog(true)} onGoodreads={()=>setShowGR(true)}/>
+          :tab==="library"  ?<Library books={books} onSelect={setSelected} onAdd={()=>setShowLog(true)} onGoodreads={()=>setShowGR(true)} onSearchAdd={async(book,status)=>{await handleSave({...book,id:crypto.randomUUID(),status,user_id:userId,rating:0,genre_rating:0,review:"",private_notes:"",quotes:"",book_club_questions:""});}}/>
           :tab==="favourites"?<Favourites books={books}/>
           :tab==="stats"    ?<Stats books={books} onGoalHit={()=>setConfetti(true)}/>
           :tab==="recap"    ?<Recap books={books}/>
