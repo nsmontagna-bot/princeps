@@ -1655,7 +1655,6 @@ const row={...b,user_id:userId,id:b.id||crypto.randomUUID(),
   rating:b.rating||null,
   genre_rating:b.genre_rating||null,
 };
-  console.log("saving row:", JSON.stringify(row));
     const {data,error}=await supabase.from("books").upsert(row,{onConflict:"id"}).select().single();
     if(data){
       setBooks(prev=>prev.find(e=>e.id===data.id)?prev.map(e=>e.id===data.id?data:e):[data,...prev]);
