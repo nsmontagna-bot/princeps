@@ -138,7 +138,17 @@ const FontLoader = () => (
     .profile-field label{display:block;margin-bottom:6px}
     .confetti-piece{position:fixed;top:-10px;animation:confettiFall linear forwards;pointer-events:none;z-index:999}
     @keyframes confettiFall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(105vh) rotate(720deg);opacity:0}}
-    @media(max-width:640px){.nav-links{gap:12px}.nav-link{font-size:9px}.stat-num{font-size:48px!important}.recap-big{font-size:52px!important}}
+    .hamburger{display:none;flex-direction:column;gap:5px;cursor:pointer;padding:4px;background:none;border:none}
+    .hamburger span{display:block;width:22px;height:2px;background:${TEXT};transition:all .2s}
+    .mobile-menu{display:none;position:fixed;inset:0;background:${BG};z-index:200;padding:24px;flex-direction:column}
+    .mobile-menu.open{display:flex}
+    @media(max-width:768px){
+      .nav-links{display:none}
+      .hamburger{display:flex}
+      .stat-num{font-size:48px!important}
+      .recap-big{font-size:52px!important}
+    }
+    @media(max-width:640px){.stat-num{font-size:48px!important}.recap-big{font-size:52px!important}}
   `}</style>
 );
 
@@ -1491,6 +1501,7 @@ export default function App(){
   const [loaded,setLoaded]=useState(false);
   const [onboarded,setOnboarded]=useState(true);
   const [confetti,setConfetti]=useState(false);
+  const [menuOpen,setMenuOpen]=useState(false);
 
   // ── Bootstrap: upsert user row, load books + profile ──
   useEffect(()=>{
@@ -1589,8 +1600,29 @@ export default function App(){
               <button className="btn-primary" style={{padding:"8px 18px",fontSize:10}} onClick={()=>setShowLog(true)}>+ Log Book</button>
               <button className="btn-ghost" style={{fontSize:10}} onClick={()=>supabase.auth.signOut()}>Sign Out</button>
             </div>
+            <button className="hamburger" onClick={()=>setMenuOpen(o=>!o)} aria-label="Menu">
+              <span style={{transform:menuOpen?"rotate(45deg) translate(5px,5px)":"none"}}/>
+              <span style={{opacity:menuOpen?0:1}}/>
+              <span style={{transform:menuOpen?"rotate(-45deg) translate(5px,-5px)":"none"}}/>
+            </button>
           </div>
         </nav>
+        <div className={`mobile-menu${menuOpen?" open":""}`}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:40}}>
+            <Logo size="md"/>
+            <button onClick={()=>setMenuOpen(false)} style={{background:"none",border:"none",fontSize:28,cursor:"pointer",color:TEXT,opacity:.5}}>×</button>
+          </div>
+          {TABS.map(t=>(
+            <span key={t.id} onClick={()=>{setTab(t.id);setSelected(null);setMenuOpen(false);}}
+              style={{fontFamily:"Playfair Display",fontStyle:"italic",fontSize:28,color:TEXT,padding:"12px 0",borderBottom:"1px solid rgba(26,26,46,.07)",cursor:"pointer",opacity:tab===t.id?1:.6}}>
+              {t.l}
+            </span>
+          ))}
+          <div style={{marginTop:"auto",paddingTop:32,display:"flex",flexDirection:"column",gap:12}}>
+            <button className="btn-primary" style={{width:"100%",padding:"14px"}} onClick={()=>{setShowLog(true);setMenuOpen(false);}}>+ Log Book</button>
+            <button className="btn-ghost" style={{width:"100%",padding:"12px"}} onClick={()=>supabase.auth.signOut()}>Sign Out</button>
+          </div>
+        </div>
         <main>
           <RecBanner/>
           {selected?(
